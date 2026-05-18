@@ -28,6 +28,7 @@ import io.airlift.mcp.model.ResourceContents;
 import io.airlift.mcp.model.ResourceTemplateValues;
 import io.airlift.mcp.model.Role;
 import io.airlift.mcp.operations.LegacyLogger;
+import io.airlift.mcp.operations.LegacyServerToClientRequest;
 
 import java.time.Duration;
 import java.util.List;
@@ -50,12 +51,14 @@ public class ConformanceEndpoints
 
     private final JsonMapper jsonMapper;
     private final LegacyLogger legacyLogger;
+    private final LegacyServerToClientRequest serverToClientRequest;
 
     @Inject
-    public ConformanceEndpoints(JsonMapper jsonMapper, LegacyLogger legacyLogger)
+    public ConformanceEndpoints(JsonMapper jsonMapper, LegacyLogger legacyLogger, LegacyServerToClientRequest serverToClientRequest)
     {
         this.jsonMapper = requireNonNull(jsonMapper, "jsonMapper is null");
         this.legacyLogger = requireNonNull(legacyLogger, "legacyLogger is null");
+        this.serverToClientRequest = requireNonNull(serverToClientRequest, "serverToClientRequest is null");
     }
 
     @McpTool(name = "test_simple_text", description = "Tests simple text content response")
@@ -125,7 +128,7 @@ public class ConformanceEndpoints
             throws InterruptedException, TimeoutException
     {
         CreateMessageRequest createMessageRequest = new CreateMessageRequest(Role.USER, new TextContent(prompt), 100);
-        JsonRpcResponse<CreateMessageResult> response = requestContext.serverToClientRequest(METHOD_SAMPLING_CREATE_MESSAGE, createMessageRequest, CreateMessageResult.class, Duration.ofMinutes(1), Duration.ofSeconds(1));
+        JsonRpcResponse<CreateMessageResult> response = serverToClientRequest.serverToClientRequest(requestContext, METHOD_SAMPLING_CREATE_MESSAGE, createMessageRequest, CreateMessageResult.class, Duration.ofMinutes(1), Duration.ofSeconds(1));
         String responseText = response.result().map(messageResult -> (messageResult.content() instanceof TextContent textContent) ? textContent.text() : "No response").orElse("No response");
         return "LLM response: " + responseText;
     }
@@ -138,7 +141,7 @@ public class ConformanceEndpoints
     {
         ObjectNode schema = new JsonSchemaBuilder().build(Optional.of("User's response"), TestElicitation.class);
         ElicitRequestForm elicitRequestForm = new ElicitRequestForm(message, schema);
-        JsonRpcResponse<ElicitResult> response = requestContext.serverToClientRequest(METHOD_ELICITATION_CREATE, elicitRequestForm, ElicitResult.class, Duration.ofMinutes(5), Duration.ofSeconds(1));
+        JsonRpcResponse<ElicitResult> response = serverToClientRequest.serverToClientRequest(requestContext, METHOD_ELICITATION_CREATE, elicitRequestForm, ElicitResult.class, Duration.ofMinutes(5), Duration.ofSeconds(1));
         return response.result().map(result -> "User response: action=%s, content=%s".formatted(result.action(), mapToJson(result.content())))
                 .orElse("No response");
     }
