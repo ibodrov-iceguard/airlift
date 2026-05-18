@@ -27,6 +27,7 @@ import io.airlift.mcp.model.ReadResourceRequest;
 import io.airlift.mcp.model.ResourceContents;
 import io.airlift.mcp.model.ResourceTemplateValues;
 import io.airlift.mcp.model.Role;
+import io.airlift.mcp.operations.LegacyLogger;
 
 import java.time.Duration;
 import java.util.List;
@@ -48,11 +49,13 @@ public class ConformanceEndpoints
     private static final String TEST_AUDIO_BASE64 = "UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQIAAAA=";
 
     private final JsonMapper jsonMapper;
+    private final LegacyLogger legacyLogger;
 
     @Inject
-    public ConformanceEndpoints(JsonMapper jsonMapper)
+    public ConformanceEndpoints(JsonMapper jsonMapper, LegacyLogger legacyLogger)
     {
         this.jsonMapper = requireNonNull(jsonMapper, "jsonMapper is null");
+        this.legacyLogger = requireNonNull(legacyLogger, "legacyLogger is null");
     }
 
     @McpTool(name = "test_simple_text", description = "Tests simple text content response")
@@ -92,9 +95,9 @@ public class ConformanceEndpoints
     @McpTool(name = "test_tool_with_logging", description = "Tests tool that emits log messages during execution")
     public String testToolWithLogging(McpRequestContext requestContext)
     {
-        requestContext.sendLog(INFO, "Tool execution started");
-        requestContext.sendLog(INFO, "Tool processing data");
-        requestContext.sendLog(INFO, "Tool execution completed");
+        legacyLogger.sendLog(requestContext, INFO, "Tool execution started");
+        legacyLogger.sendLog(requestContext, INFO, "Tool processing data");
+        legacyLogger.sendLog(requestContext, INFO, "Tool execution completed");
 
         return "Tool with logging executed successfully";
     }

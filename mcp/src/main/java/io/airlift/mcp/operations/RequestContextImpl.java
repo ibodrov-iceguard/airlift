@@ -2,7 +2,6 @@ package io.airlift.mcp.operations;
 
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.google.common.base.Stopwatch;
-import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.airlift.mcp.McpIdentity.Authenticated;
@@ -13,8 +12,6 @@ import io.airlift.mcp.model.JsonRpcErrorDetail;
 import io.airlift.mcp.model.JsonRpcRequest;
 import io.airlift.mcp.model.JsonRpcResponse;
 import io.airlift.mcp.model.ListRootsResult;
-import io.airlift.mcp.model.LoggingLevel;
-import io.airlift.mcp.model.LoggingMessageNotification;
 import io.airlift.mcp.model.ProgressNotification;
 import io.airlift.mcp.model.Protocol;
 import io.airlift.mcp.model.Root;
@@ -34,19 +31,16 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Supplier;
 
 import static com.google.common.base.Throwables.getRootCause;
 import static io.airlift.mcp.McpException.exception;
 import static io.airlift.mcp.model.Constants.MCP_SESSION_ID;
 import static io.airlift.mcp.model.Constants.METHOD_ROOTS_LIST;
-import static io.airlift.mcp.model.Constants.NOTIFICATION_MESSAGE;
 import static io.airlift.mcp.model.Constants.NOTIFICATION_PROGRESS;
 import static io.airlift.mcp.model.JsonRpcRequest.buildNotification;
 import static io.airlift.mcp.model.JsonRpcRequest.buildRequest;
 import static io.airlift.mcp.model.Protocol.LATEST_PROTOCOL;
 import static io.airlift.mcp.sessions.SessionValueKey.CLIENT_CAPABILITIES;
-import static io.airlift.mcp.sessions.SessionValueKey.LOGGING_LEVEL;
 import static io.airlift.mcp.sessions.SessionValueKey.PROTOCOL;
 import static io.airlift.mcp.sessions.SessionValueKey.ROOTS;
 import static io.airlift.mcp.sessions.SessionValueKey.serverToClientResponseKey;
@@ -61,7 +55,6 @@ class RequestContextImpl
     private final HttpServletResponse response;
     private final MessageWriter messageWriter;
     private final Optional<Object> progressToken;
-    private final Supplier<LoggingLevel> loggingLevelSupplier;
     private final Session session;
     private final Authenticated<?> identity;
 
@@ -79,19 +72,8 @@ class RequestContextImpl
                 response,
                 messageWriter,
                 Optional.empty(),
-                buildLoggingLevelSupplier(sessionController, request),
                 new SessionImpl(sessionController, optionalSessionId(request).orElse(Session.NULL_SESSION_ID)),
                 identity);
-    }
-
-    private static Supplier<LoggingLevel> buildLoggingLevelSupplier(Optional<SessionController> sessionController, HttpServletRequest request)
-    {
-        return Suppliers.memoize(() -> {
-            SessionController localSessionController = sessionController.orElseThrow(() -> new IllegalStateException("Sessions not enabled"));
-            SessionId sessionId = requireSessionId(request);
-
-            return localSessionController.getSessionValue(sessionId, LOGGING_LEVEL).orElseThrow(() -> exception("Session is invalid"));
-        });
     }
 
     private RequestContextImpl(
@@ -101,7 +83,6 @@ class RequestContextImpl
             HttpServletResponse response,
             MessageWriter messageWriter,
             Optional<Object> progressToken,
-            Supplier<LoggingLevel> loggingLevelSupplier,
             Session session,
             Authenticated<?> identity)
     {
@@ -111,14 +92,13 @@ class RequestContextImpl
         this.response = requireNonNull(response, "response is null");
         this.messageWriter = requireNonNull(messageWriter, "messageWriter is null");
         this.progressToken = requireNonNull(progressToken, "progressToken is null");
-        this.loggingLevelSupplier = requireNonNull(loggingLevelSupplier, "loggingLevelSupplier is null");
         this.session = requireNonNull(session, "session is null");
         this.identity = requireNonNull(identity, "identity is null");
     }
 
     RequestContextImpl withProgressToken(Optional<Object> progressToken)
     {
-        return new RequestContextImpl(jsonMapper, sessionController, request, response, messageWriter, progressToken, loggingLevelSupplier, session, identity);
+        return new RequestContextImpl(jsonMapper, sessionController, request, response, messageWriter, progressToken, session, identity);
     }
 
     Protocol protocol()
@@ -135,7 +115,7 @@ class RequestContextImpl
 
     RequestContextImpl withSessionId(SessionId sessionId)
     {
-        return new RequestContextImpl(jsonMapper, sessionController, request, response, messageWriter, progressToken, loggingLevelSupplier, new SessionImpl(sessionController, sessionId), identity);
+        return new RequestContextImpl(jsonMapper, sessionController, request, response, messageWriter, progressToken, new SessionImpl(sessionController, sessionId), identity);
     }
 
     @Override
@@ -155,7 +135,6 @@ class RequestContextImpl
         return session;
     }
 
-    @SuppressWarnings("SwitchStatementWithTooFewBranches")
     @Override
     public void sendProgress(double progress, double total, String message)
     {
@@ -166,16 +145,6 @@ class RequestContextImpl
 
         ProgressNotification notification = new ProgressNotification(appliedProgressToken, message, OptionalDouble.of(progress), OptionalDouble.of(total));
         sendMessage(NOTIFICATION_PROGRESS, Optional.of(notification));
-    }
-
-    @Override
-    public void sendLog(LoggingLevel level, Optional<String> logger, Optional<Object> data)
-    {
-        LoggingLevel sessionLoggingLevel = loggingLevelSupplier.get();
-        if (level.level() >= sessionLoggingLevel.level()) {
-            LoggingMessageNotification logNotification = new LoggingMessageNotification(level, logger, data);
-            sendMessage(NOTIFICATION_MESSAGE, Optional.of(logNotification));
-        }
     }
 
     @Override

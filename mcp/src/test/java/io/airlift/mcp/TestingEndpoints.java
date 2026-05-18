@@ -29,6 +29,7 @@ import io.airlift.mcp.model.Role;
 import io.airlift.mcp.model.Root;
 import io.airlift.mcp.model.StructuredContentResult;
 import io.airlift.mcp.model.Tool;
+import io.airlift.mcp.operations.LegacyLogger;
 
 import java.time.Duration;
 import java.util.List;
@@ -50,6 +51,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class TestingEndpoints
 {
     private final McpEntities entities;
+    private final LegacyLogger legacyLogger;
     private final Set<ToolEntry> tools;
     private final Set<PromptEntry> prompts;
     private final Set<ResourceEntry> resources;
@@ -63,9 +65,11 @@ public class TestingEndpoints
             Set<ToolEntry> tools,
             Set<PromptEntry> prompts,
             Set<ResourceEntry> resources,
-            SleepToolController sleepToolController)
+            SleepToolController sleepToolController,
+            LegacyLogger legacyLogger)
     {
         this.entities = requireNonNull(entities, "entities is null");
+        this.legacyLogger = requireNonNull(legacyLogger, "legacyLogger is null");
 
         this.tools = ImmutableSet.copyOf(tools);
         this.prompts = ImmutableSet.copyOf(prompts);
@@ -195,8 +199,8 @@ public class TestingEndpoints
     @McpTool(name = "log", description = "Test logging")
     public void testLogging(McpRequestContext requestContext)
     {
-        requestContext.sendLog(LoggingLevel.DEBUG, "This is debug");
-        requestContext.sendLog(LoggingLevel.ALERT, "This is alert");
+        legacyLogger.sendLog(requestContext, LoggingLevel.DEBUG, "This is debug");
+        legacyLogger.sendLog(requestContext, LoggingLevel.ALERT, "This is alert");
     }
 
     public enum VersionType
